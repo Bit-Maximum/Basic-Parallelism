@@ -8,6 +8,7 @@
 using namespace std;
 
 
+
 double average(const double* V, size_t n) {
     double sum = 0.0;
     for(size_t i = 0; i < n; i++) {
@@ -39,13 +40,15 @@ int main() {
     }
 
     auto t1 = std::chrono::steady_clock::now();
-    cout << "Sync AVG: " << average(data.get(), SIZE) << endl;
+    double r1 = average(data.get(), SIZE);
     auto t2 = std::chrono::steady_clock::now();
+    cout << "Sync AVG: " << r1 << endl;
     cout << "Duration of synchronous calc: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << endl;
 
     t1 = std::chrono::steady_clock::now();
-    cout << "Parallel AVG: " << average_omp(data.get(), SIZE) << endl;
+    double r2 = average_omp(data.get(), SIZE);
     t2 = std::chrono::steady_clock::now();
+    cout << "Parallel AVG: " << r2 << endl;
     cout << "Duration of parallel calc: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << endl;
 
 
