@@ -1,56 +1,90 @@
-#include <iostream>
-#include <memory>
-#include <omp.h>
 #include <chrono>
+#include <cstdlib>
+#include <iostream>
+#include <omp.h>
 
-#define N (1 << 23)
-
-using namespace std;
+#define N (1u << 24)
 
 
+double av_omp_3(const double* V, size_t n) {
+    unsigned P = omp_get_num_procs();
+    unsigned T;
+    double* r = static_cast<double*>(calloc(sizeof(double), P));
 
-double average(const double* V, size_t n) {
-    double sum = 0.0;
-    for(size_t i = 0; i < n; i++) {
-        sum += V[i];
+#pragma omp parallel shared(T)
+    {
+        unsigned
+                t = omp_get_thread_num();
+#pragma omp single
+        {
+            T = omp_get_num_threads();
+        }
+
+        double output = 0.0;
+        for (size_t i = t; i < n; i += T)
+            output += V[i];
+        r[t] = output;
     }
-    return sum / (double) n;
+
+    double sum = 0.0;
+    for (size_t i = 0; i < P; i++)
+        sum += r[i];
+
+    return sum / n;
 }
 
+struct sum_t {
+    double v;
+    char padding[64 - sizeof(double)];
+};
 
-double average_omp(const double* V, size_t n) {
-    double sum = 0.0;
-    #pragma omp parallel for reduction(+:sum)
-    for (size_t i = 0; i < n; i++) {
-        sum += V[i];
+double av_omp_4(const double* V, size_t n) {
+    unsigned P = omp_get_num_procs();
+    unsigned T;
+    struct sum_t* r = static_cast<sum_t*>(calloc(64, P));
+
+#pragma omp parallel shared(T)
+    {
+        unsigned
+                t = omp_get_thread_num();
+#pragma omp single
+        {
+            T = omp_get_num_threads();
+        }
+
+        double output = 0.0;
+        for (size_t i = t; i < n; i += T)
+            output += V[i];
+        r[t].v = output;
     }
-    return sum / (double) n;
-}
 
+    double sum = 0.0;
+    for (size_t i = 0; i < P; i++)
+        sum += r[i].v;
+
+    return sum / n;
+}
 
 
 int main() {
+    double* p = static_cast<double*>(malloc(N * sizeof(double)));
 
-    const size_t SIZE = N;
-    auto data = std::make_unique<double[]>(N);
-
-    for (size_t i = 0; i < SIZE; ++i){
-        data[i] = (double) i;
-//        cout << data[i] << " ";
+    for (size_t i = 0; i < N; i++) {
+        p[i] = (double)i;
     }
 
-    auto t1 = std::chrono::steady_clock::now();
-    double r1 = average(data.get(), SIZE);
-    auto t2 = std::chrono::steady_clock::now();
-    cout << "Sync AVG: " << r1 << endl;
-    cout << "Duration of synchronous calc: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << endl;
+    auto t4 = std::chrono::steady_clock::now();
+    std::cout << "Average: " << av_omp_3(p, N) << std::endl;
+    std::cout << "Time:    " <<
+              std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t4).count() <<
+              std::endl << std::endl;
 
-    t1 = std::chrono::steady_clock::now();
-    double r2 = average_omp(data.get(), SIZE);
-    t2 = std::chrono::steady_clock::now();
-    cout << "Parallel AVG: " << r2 << endl;
-    cout << "Duration of parallel calc: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << endl;
+    auto t5 = std::chrono::steady_clock::now();
+    std::cout << "Average: " << av_omp_4(p, N) << std::endl;
+    std::cout << "Time:    " <<
+              std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t5).count() <<
+              std::endl << std::endl;
 
-
+    free(p);
     return 0;
 }
