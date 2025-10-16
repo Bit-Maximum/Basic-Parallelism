@@ -121,6 +121,31 @@ void matrixMulAVX2(double *result, const double *matA, const double *matB, size_
 }
 
 
+void speedtest(size_t rowsA, size_t sharedDim, size_t colsB) {
+    std::vector<double> A = std::vector<double>(rowsA * sharedDim, 1.0);
+    std::vector<double> B = std::vector<double>(colsB * sharedDim);
+    std::vector<double> R1 = std::vector<double>(rowsA * colsB, 0.0);
+    std::vector<double> R2 = std::vector<double>(rowsA * colsB, 0.0);
+
+    for (size_t i = 0; i < colsB * sharedDim; ++i) {
+        B[i] = (double) i;
+    }
+
+    auto t1 = std::chrono::steady_clock::now();
+    matrixMul(R1.data(), A.data(), B.data(), sharedDim, rowsA, colsB);
+    auto t2 = std::chrono::steady_clock::now();
+//    matrixPrint(R1.data(), rowsA, colsB);
+
+    auto t3 = std::chrono::steady_clock::now();
+    matrixMulAVX2(R2.data(), A.data(), B.data(), sharedDim, rowsA, colsB);
+    auto t4 = std::chrono::steady_clock::now();
+//    matrixPrint(R2.data(), rowsA, colsB);
+
+    cout << "Duration of synchronous calc: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << endl;
+    cout << "Duration of AVX2 calc: " << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count() << endl;
+}
+
+
 
 int main() {
     cout << "Test 1:" << endl;
@@ -144,23 +169,8 @@ int main() {
     matrixMul(R.data(), A.data(), B.data(), sharedDim, rowsA, colsB);
     matrixPrint(R.data(), rowsA, colsB);
 
-    rowsA = 12; sharedDim = 12; colsB = 12;
-    A = std::vector<double>(rowsA * sharedDim, 1.0);
-    B = std::vector<double>(colsB * sharedDim);
-    std::vector<double> R1 = std::vector<double>(rowsA * colsB, 0.0);
-    std::vector<double> R2 = std::vector<double>(rowsA * colsB, 0.0);
-
-    for (size_t i = 0; i < colsB * sharedDim; ++i) {
-        B[i] = (double) i;
-    }
-
-    matrixMul(R1.data(), A.data(), B.data(), sharedDim, rowsA, colsB);
-
-    matrixPrint(R1.data(), rowsA, colsB);
-
-    matrixMulAVX2(R2.data(), A.data(), B.data(), sharedDim, rowsA, colsB);
-
-    matrixPrint(R2.data(), rowsA, colsB);
-
+    speedtest(rowsA=512, sharedDim = 512, colsB = 512);
+    speedtest(rowsA=511, sharedDim = 499, colsB = 666);
+    speedtest(rowsA=323, sharedDim = 318, colsB = 360);
     return 0;
 }
