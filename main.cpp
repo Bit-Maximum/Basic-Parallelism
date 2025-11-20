@@ -1,6 +1,7 @@
 #include <chrono>
 #include <iostream>
 #include <immintrin.h>
+#include <x86intrin.h>
 #include <cstddef>
 
 
@@ -89,7 +90,7 @@ void matrixMulAVX2(double *result, const double *matA, const double *matB, size_
     }
 
     const double *matT = TransposeT.data();
-    double temp[2];
+    double temp[4];
 
     for (size_t r1 = 0; r1 < rowsA; r1++)
         for (size_t c2 = 0; c2 < colsB; c2++) {
@@ -104,12 +105,8 @@ void matrixMulAVX2(double *result, const double *matA, const double *matB, size_
             }
 
             // Суммируем 4 элемента внутри регистра
-            __m128d low = _mm256_castpd256_pd128(sum_vec);
-            __m128d high = _mm256_extractf128_pd(sum_vec, 1);
-            __m128d sum128 = _mm_add_pd(low, high);
-
-            _mm_storeu_pd(temp, sum128);
-            double result_val = temp[0] + temp[1];
+            _mm256_storeu_pd(temp, sum_vec);
+            double result_val = temp[0] + temp[1] + temp[2] + temp[3];
 
             // Хвостовые элементы
             for (; k < sharedDim; ++k) {
@@ -121,11 +118,63 @@ void matrixMulAVX2(double *result, const double *matA, const double *matB, size_
 }
 
 
+void matrixMulAVX2_gather(double *result, const double *matA, const double *matB,
+                          size_t sharedDim, size_t rowsA, size_t colsB) {
+
+    double temp[4];
+    for (size_t r1 = 0; r1 < rowsA; r1++) {
+        for (size_t c2 = 0; c2 < colsB; c2++) {
+            __m256d sum_vec = _mm256_setzero_pd();
+            size_t k = 0;
+
+            // Умножаем блоками по 4 double
+            for (; k + 3 < sharedDim; k += 4) {
+                __m256d a_vec = _mm256_loadu_pd(&matA[r1 * sharedDim + k]);
+
+                __m256i indices = _mm256_setr_epi64x(
+                        k * colsB + c2,
+                        (k + 1) * colsB + c2,
+                        (k + 2) * colsB + c2,
+                        (k + 3) * colsB + c2
+                );
+                __m256d b_vec = _mm256_i64gather_pd(matB, indices, sizeof(double));
+
+                sum_vec = _mm256_add_pd(sum_vec, _mm256_mul_pd(a_vec, b_vec));
+            }
+
+            // Суммируем 4 элемента внутри регистра
+            _mm256_storeu_pd(temp, sum_vec);
+            double result_val = temp[0] + temp[1] + temp[2] + temp[3];
+
+            // Хвостовые элементы
+            for (; k < sharedDim; ++k) {
+                result_val += matA[r1 * sharedDim + k] * matB[k * colsB + c2];
+            }
+
+            result[r1 * colsB + c2] = result_val;
+        }
+    }
+}
+
+//void matrixMul_clear(double *result, const double *matA, const double *matB, size_t sharedDim, size_t rowsA, size_t colsB){
+//    for (size_t r1 = 0; r1 < rowsA / sizeof(__m256d); r1++)
+//        for (size_t c2 = 0; c2 < colsB; c2++) {
+//            __m256d accum = _mm256_setzero_pd();
+//            for (size_t i = 0; i < sharedDim; i++)
+//                __m256d x = _mm256_loadu_pd(&matA[r1 * sharedDim + i]);
+//                accum += matA[r1 * sharedDim + i] * matB[i * colsB + c2];
+//            result[r1 * colsB + c2] = accum;
+//        }
+//}
+
+
+
 void speedtest(size_t rowsA, size_t sharedDim, size_t colsB) {
     std::vector<double> A = std::vector<double>(rowsA * sharedDim, 1.0);
     std::vector<double> B = std::vector<double>(colsB * sharedDim);
     std::vector<double> R1 = std::vector<double>(rowsA * colsB, 0.0);
     std::vector<double> R2 = std::vector<double>(rowsA * colsB, 0.0);
+    std::vector<double> R3 = std::vector<double>(rowsA * colsB, 0.0);
 
     for (size_t i = 0; i < colsB * sharedDim; ++i) {
         B[i] = (double) i;
@@ -141,8 +190,14 @@ void speedtest(size_t rowsA, size_t sharedDim, size_t colsB) {
     auto t4 = std::chrono::steady_clock::now();
 //    matrixPrint(R2.data(), rowsA, colsB);
 
+    auto t5 = std::chrono::steady_clock::now();
+    matrixMulAVX2_gather(R3.data(), A.data(), B.data(), sharedDim, rowsA, colsB);
+    auto t6 = std::chrono::steady_clock::now();
+//    matrixPrint(R3.data(), rowsA, colsB);
+
     cout << "Duration of synchronous calc: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << endl;
     cout << "Duration of AVX2 calc: " << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count() << endl;
+    cout << "Duration of AVX2_Gather calc: " << std::chrono::duration_cast<std::chrono::milliseconds>(t6 - t5).count() << endl;
 }
 
 
@@ -172,5 +227,7 @@ int main() {
     speedtest(rowsA=512, sharedDim = 512, colsB = 512);
     speedtest(rowsA=511, sharedDim = 499, colsB = 666);
     speedtest(rowsA=323, sharedDim = 318, colsB = 360);
+    speedtest(rowsA=8, sharedDim = 8, colsB = 8);
+
     return 0;
 }
