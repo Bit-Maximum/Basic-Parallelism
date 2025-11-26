@@ -15,7 +15,7 @@ class barrier {
     std::condition_variable cv;
 public:
 
-    barrier(unsigned threads): T_max(threads), T(T_max) {}
+    explicit barrier(unsigned threads): T_max(threads), T(T_max) {}
 
     void arrive_and_wait() {
         std::unique_lock lock {mtx};
@@ -32,8 +32,6 @@ public:
         }
     }
 };
-
-
 
 IntegerWord pow_mod(IntegerWord base, IntegerWord power, IntegerWord mod) {
 	IntegerWord result = 1;
