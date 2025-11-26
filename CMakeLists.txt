@@ -12,5 +12,12 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native")
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -march=native -mavx512f -mavx512dq")
 
 
-add_executable(Parallelism main.cpp
+add_executable(Parallelism
+        entrypoint.cpp
+        mod_ops.cpp
+        num_threads.cpp
+        performance.cpp
+        randomize.cpp
+        test.cpp
+        vector_mod.cpp
 )
