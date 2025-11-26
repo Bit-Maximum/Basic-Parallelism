@@ -25,14 +25,14 @@ struct thread_range {
 	std::size_t b, e;
 };
 thread_range vector_thread_range(size_t total_words, unsigned total_threads, unsigned thread_num) {
-	auto b = total_words % total_threads;
-	auto s = total_words / total_threads;
-	if (thread_num < b)
-        b = ++s * thread_num;
+	auto remains_size = total_words % total_threads;
+	auto chunk_size = total_words / total_threads;
+	if (thread_num < remains_size)
+        remains_size = ++chunk_size * thread_num;
 	else
-        b += s * thread_num;
-	size_t e = b + s;
-	return thread_range(b, e);
+        remains_size += chunk_size * thread_num;
+	size_t e = remains_size + chunk_size;
+	return thread_range(remains_size, e);
 }
 
 struct partial_result_t {
