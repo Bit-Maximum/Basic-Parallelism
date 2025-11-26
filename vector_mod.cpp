@@ -34,72 +34,70 @@ public:
 };
 
 IntegerWord pow_mod(IntegerWord base, IntegerWord power, IntegerWord mod) {
-	IntegerWord result = 1;
-	while (power > 0) {
-		if (power % 2 != 0) {
-			result = mul_mod(result, base, mod);
-		}
-		power >>= 1;
-		base = mul_mod(base, base, mod);
-	}
-	return result;
+    IntegerWord result = 1;
+    while (power > 0) {
+        if (power % 2 != 0) {
+            result = mul_mod(result, base, mod);
+        }
+        power >>= 1;
+        base = mul_mod(base, base, mod);
+    }
+    return result;
 }
 
 IntegerWord word_pow_mod(size_t power, IntegerWord mod) {
-	return pow_mod((-mod) % mod, power, mod);
+    return pow_mod((-mod) % mod, power, mod);
 }
 
 struct thread_range {
-	std::size_t start, end;
+    std::size_t start, end;
 };
 thread_range vector_thread_range(size_t total_words, unsigned total_threads, unsigned thread_num) {
-	auto remains_size = total_words % total_threads;
-	auto chunk_size = total_words / total_threads;
-	if (thread_num < remains_size)
+    auto remains_size = total_words % total_threads;
+    auto chunk_size = total_words / total_threads;
+    if (thread_num < remains_size)
         remains_size = ++chunk_size * thread_num;
-	else
+    else
         remains_size += chunk_size * thread_num;
-	size_t end = remains_size + chunk_size;
-	return thread_range(remains_size, end);
+    size_t end = remains_size + chunk_size;
+    return thread_range(remains_size, end);
 }
 
-struct partial_result_t {
-	alignas(std::hardware_destructive_interference_size) IntegerWord value;
+struct thread_result_t {
+    alignas(std::hardware_destructive_interference_size) IntegerWord value;
 };
 
 IntegerWord vector_mod(const IntegerWord* V, std::size_t N, IntegerWord mod) {
-	long long total_threads = get_num_threads();
+    long long total_threads = get_num_threads();
     // Made threads -1 because first thread is already running
-	std::vector<std::thread> threads(total_threads - 1);
-	std::vector<partial_result_t> partial_results(total_threads);
-	std::barrier<> bar(total_threads);
+    std::vector<std::thread> threads(total_threads - 1);
+    std::vector<thread_result_t> threads_results(total_threads);
+    std::barrier<> bar(total_threads);
 
-	auto thread_lambda = [V, N, total_threads, mod, &partial_results, &bar](unsigned t) {
-		auto [b, e] = vector_thread_range(N, total_threads, t);
+    auto thread_lambda = [V, N, total_threads, mod, &threads_results, &bar](unsigned thread_num) {
+        auto [start, end] = vector_thread_range(N, total_threads, thread_num);
 
-		IntegerWord sum = 0;
-		// Схема Хорнера
-		for (std::size_t i = e; b < i;) {
-			//sum = (sum * x + V[end-1-i]) % mod;
-			sum = add_mod(times_word(sum, mod), V[--i], mod); // то же самое, но без переполнения
-		}
-		partial_results[t].value = sum;
-		for (size_t i = 1, ii = 2; i < total_threads; i = ii, ii += ii) {
-			bar.arrive_and_wait();
-			if (t % ii == 0 && t + i < total_threads) {
-				auto neighbor = vector_thread_range(N, total_threads, t + i);
-				partial_results[t].value = add_mod(partial_results[t].value, mul_mod(partial_results[t + i].value, word_pow_mod(neighbor.start - b, mod), mod), mod);
-			}
-		}
-	};
-	// s готова
-	for (std::size_t i = 1; i < total_threads; ++i) {
-		threads[i - 1] = std::thread(thread_lambda, i);
-	}
-	thread_lambda(0);
+        IntegerWord sum = 0;
+        for (std::size_t i = end; start < i;) {
+            sum = add_mod(times_word(sum, mod), V[--i], mod);
+        }
+        threads_results[thread_num].value = sum;
+        for (size_t i = 1, ii = 2; i < total_threads; i = ii, ii += ii) {
+            bar.arrive_and_wait();
+            if (thread_num % ii == 0 && thread_num + i < total_threads) {
+                auto neighbor = vector_thread_range(N, total_threads, thread_num + i);
+                threads_results[thread_num].value = add_mod(threads_results[thread_num].value, mul_mod(threads_results[thread_num + i].value, word_pow_mod(neighbor.start - start, mod), mod), mod);
+            }
+        }
+    };
 
-	for (auto& i : threads) {
-		i.join();
-	}
-	return partial_results[0].value;
+    for (std::size_t i = 1; i < total_threads; ++i) {
+        threads[i - 1] = std::thread(thread_lambda, i);
+    }
+    thread_lambda(0);
+
+    for (auto& i : threads) {
+        i.join();
+    }
+    return threads_results[0].value;
 }

@@ -7,8 +7,8 @@
 
 std::vector<measurement> run_experiments()
 {
-	constexpr std::size_t word_count = (std::size_t(1) << 31) / sizeof(IntegerWord);
-//	constexpr std::size_t word_count = (std::size_t(1) << 28) / sizeof(IntegerWord);
+//	constexpr std::size_t word_count = (std::size_t(1) << 31) / sizeof(IntegerWord);
+	constexpr std::size_t word_count = (std::size_t(1) << 29) / sizeof(IntegerWord);
 
 	constexpr IntegerWord divisor = INTWORD_MAX;
 	auto data = std::make_unique<IntegerWord[]>(word_count);
