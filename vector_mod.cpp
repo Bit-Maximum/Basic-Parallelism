@@ -12,7 +12,6 @@ IntegerWord pow_mod(IntegerWord base, IntegerWord power, IntegerWord mod) {
 			result = mul_mod(result, base, mod);
 		}
 		power >>= 1;
-//        base /= 2;
 		base = mul_mod(base, base, mod);
 	}
 	return result;
@@ -25,13 +24,13 @@ IntegerWord word_pow_mod(size_t power, IntegerWord mod) {
 struct thread_range {
 	std::size_t b, e;
 };
-thread_range vector_thread_range(size_t n, unsigned T, unsigned t) {
-	auto b = n % T;
-	auto s = n / T;
-	if (t < b)
-        b = ++s * t;
+thread_range vector_thread_range(size_t total_words, unsigned total_threads, unsigned thread_num) {
+	auto b = total_words % total_threads;
+	auto s = total_words / total_threads;
+	if (thread_num < b)
+        b = ++s * thread_num;
 	else
-        b += s * t;
+        b += s * thread_num;
 	size_t e = b + s;
 	return thread_range(b, e);
 }
